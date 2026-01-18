@@ -1,7 +1,5 @@
-import requests
-from bs4 import BeautifulSoup
-import json, sqlite3, csv, os
-from datetime import datetime
+import requests, json, sqlite3, csv, os
+from datetime import datetime, date
 
 DB_PATH = "prices.db"
 CSV_PATH = "prices.csv"
@@ -14,7 +12,7 @@ def init_db():
     CREATE TABLE IF NOT EXISTS prices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         product_id TEXT,
-        price TEXT,
+        price REAL,
         scraped_at TEXT,
         source_url TEXT
     )
@@ -28,6 +26,7 @@ def scrape():
 
     conn = init_db()
     cur = conn.cursor()
+    today = date.today().isoformat()
 
     file_exists = os.path.exists(CSV_PATH)
     with open(CSV_PATH, "a", newline="") as csv_file:
@@ -37,27 +36,25 @@ def scrape():
 
         for p in products:
             print(f"Fetching {p['url']}")
-            r = requests.get(p["url"], timeout=15)
-            soup = BeautifulSoup(r.text, "html.parser")
+            data = requests.get(p["url"], timeout=20).json()
+            price = float(data["price"])
 
-            el = soup.select_one(p["selector"])
-            price = el.get_text(strip=True) if el else "N/A"
+            cur.execute("""
+                SELECT 1 FROM prices WHERE product_id=? AND date(scraped_at)=?
+            """, (p["product_id"], today))
+            if cur.fetchone():
+                continue
 
             ts = datetime.utcnow().isoformat()
-
-            cur.execute(
-                """
+            cur.execute("""
                 INSERT INTO prices (product_id, price, scraped_at, source_url)
                 VALUES (?, ?, ?, ?)
-                """,
-                (p["product_id"], price, ts, p["url"])
-            )
-
+            """, (p["product_id"], price, ts, p["url"]))
             writer.writerow([p["product_id"], price, ts, p["url"]])
 
     conn.commit()
     conn.close()
-    print("Scraping complete.")
+    print("Daily scraping complete.")
 
 if __name__ == "__main__":
     scrape()
