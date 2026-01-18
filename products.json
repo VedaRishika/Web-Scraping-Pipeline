@@ -1,20 +1,20 @@
 [
   {
-    "product_id": "milk_off",
+    "product_id": "milk_store",
     "name": "Milk",
-    "url": "https://world.openfoodfacts.org/product/3017620422003",
-    "selector": "span#field_prices"
+    "url": "https://fakestoreapi.com/products/1",
+    "selector": "price"
   },
   {
-    "product_id": "bread_off",
+    "product_id": "bread_store",
     "name": "Bread",
-    "url": "https://world.openfoodfacts.org/product/8008698011396",
-    "selector": "span#field_prices"
+    "url": "https://fakestoreapi.com/products/2",
+    "selector": "price"
   },
   {
-    "product_id": "chocolate_off",
-    "name": "Chocolate",
-    "url": "https://world.openfoodfacts.org/product/737628064502",
-    "selector": "span#field_prices"
+    "product_id": "eggs_store",
+    "name": "Eggs",
+    "url": "https://fakestoreapi.com/products/3",
+    "selector": "price"
   }
 ]
