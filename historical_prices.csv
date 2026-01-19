@@ -1,0 +1,4 @@
+scraped_at,id,product_id,price,source_url
+2026-01-18 23:35:01.583721,2,bread_store,22.3,https://fakestoreapi.com/products/2
+2026-01-18 23:35:02.251582,3,eggs_store,55.99,https://fakestoreapi.com/products/3
+2026-01-18 23:35:01.036124,1,milk_store,109.95,https://fakestoreapi.com/products/1
