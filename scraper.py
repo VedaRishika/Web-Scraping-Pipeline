@@ -45,10 +45,12 @@ def scrape():
                 print(f"Skipping {p['url']} (invalid API response)")
                 continue
 
-            base_price = float(data["price"])
-            price = base_price * (1 + random.uniform(-0.05, 0.05))  # simulate market movement
+            base_price = float(data.get("price", 0))
+            if base_price == 0:
+                continue
 
-            # Enforce one record per product per day
+            price = base_price * (1 + random.uniform(-0.05, 0.05))
+
             cur.execute(
                 "SELECT 1 FROM prices WHERE product_id=? AND date(scraped_at)=?",
                 (p["product_id"], today),
