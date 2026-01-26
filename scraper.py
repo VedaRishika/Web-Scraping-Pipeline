@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 import random
 
-PRICES_FILE = "prices.csv"
+HIST_FILE = "historical_prices.csv"
 
 PRODUCTS = [
     {"product_id": "milk_store", "url": "https://fakestoreapi.com/products/1"},
@@ -13,9 +13,9 @@ PRODUCTS = [
 ]
 
 def scrape():
-    file_exists = os.path.exists(PRICES_FILE)
+    file_exists = os.path.exists(HIST_FILE)
 
-    with open(PRICES_FILE, "a", newline="") as f:
+    with open(HIST_FILE, "a", newline="") as f:
         writer = csv.writer(f)
 
         if not file_exists:
