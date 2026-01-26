@@ -1,46 +1,35 @@
 import pandas as pd
 import os
-from datetime import datetime
 
-TODAY_FILE = "prices.csv"
 HIST_FILE = "historical_prices.csv"
 METRICS_FILE = "price_metrics.csv"
 ANOMALY_FILE = "price_anomalies.csv"
 
 
-def load_today_prices():
-    if not os.path.exists(TODAY_FILE):
+def load_history():
+    if not os.path.exists(HIST_FILE):
+        print("No historical data found.")
         return pd.DataFrame()
 
-    df = pd.read_csv(TODAY_FILE)
+    df = pd.read_csv(HIST_FILE)
     df["scraped_at"] = pd.to_datetime(df["scraped_at"])
     df["date"] = df["scraped_at"].dt.date
     df["price"] = pd.to_numeric(df["price"], errors="coerce")
     df = df.dropna(subset=["price"])
+
     return df[["date", "product_id", "price"]]
 
 
-def update_historical(today_df):
-    if today_df.empty:
-        return pd.DataFrame()
-
-    if os.path.exists(HIST_FILE):
-        hist = pd.read_csv(HIST_FILE)
-        hist["date"] = pd.to_datetime(hist["date"]).dt.date
-        combined = pd.concat([hist, today_df], ignore_index=True)
-    else:
-        combined = today_df.copy()
-
-    combined.to_csv(HIST_FILE, index=False)
-    return combined
-
-
-def compute_metrics(hist):
+def compute_metrics(df):
     metrics = []
 
-    for pid, g in hist.groupby("product_id"):
+    for pid, g in df.groupby("product_id"):
         g = g.sort_values("date")
+
         returns = g["price"].pct_change()
+
+        if returns.dropna().empty:
+            continue
 
         inflation = returns.mean()
         volatility = returns.std()
@@ -56,16 +45,17 @@ def compute_metrics(hist):
     return metrics_df
 
 
-def detect_anomalies(hist, threshold=1.5):
+def detect_anomalies(df, threshold=1.5):
     anomalies = []
 
-    for pid, g in hist.groupby("product_id"):
+    for pid, g in df.groupby("product_id"):
         g = g.sort_values("date")
+
         returns = g["price"].pct_change()
         mean = returns.mean()
         std = returns.std()
 
-        if std == 0 or pd.isna(std):
+        if pd.isna(std) or std == 0:
             continue
 
         z_scores = (returns - mean) / std
@@ -85,21 +75,16 @@ def detect_anomalies(hist, threshold=1.5):
 
 
 def main():
-    today_df = load_today_prices()
-    if today_df.empty:
-        print("No valid data today.")
+    df = load_history()
+
+    if df.empty or len(df) < 3:
+        print("Not enough historical data yet.")
         return
 
-    hist = update_historical(today_df)
+    compute_metrics(df)
+    detect_anomalies(df)
 
-    if len(hist) < 3:
-        print("Not enough history yet for metrics.")
-        return
-
-    compute_metrics(hist)
-    detect_anomalies(hist)
-
-    print("Historical table, metrics, and anomalies updated.")
+    print("Metrics and anomalies updated successfully.")
 
 
 if __name__ == "__main__":
