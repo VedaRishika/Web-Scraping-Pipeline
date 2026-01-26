@@ -2,8 +2,11 @@ name: Daily Grocery Price Monitor
 
 on:
   schedule:
-    - cron: "0 2 * * *"   # once daily
+    - cron: "0 2 * * *"
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   run-pipeline:
