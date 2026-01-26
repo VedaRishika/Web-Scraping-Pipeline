@@ -1,78 +1,106 @@
 import pandas as pd
-import sqlite3
+import os
+from datetime import datetime
 
-DB_PATH = "prices.db"
+TODAY_FILE = "prices.csv"
+HIST_FILE = "historical_prices.csv"
+METRICS_FILE = "price_metrics.csv"
+ANOMALY_FILE = "price_anomalies.csv"
 
-def load_data():
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql("SELECT * FROM prices", conn)
-    conn.close()
+
+def load_today_prices():
+    if not os.path.exists(TODAY_FILE):
+        return pd.DataFrame()
+
+    df = pd.read_csv(TODAY_FILE)
     df["scraped_at"] = pd.to_datetime(df["scraped_at"])
+    df["date"] = df["scraped_at"].dt.date
     df["price"] = pd.to_numeric(df["price"], errors="coerce")
     df = df.dropna(subset=["price"])
-    return df
+    return df[["date", "product_id", "price"]]
 
-def build_historical(df):
-    return df.sort_values(["product_id", "scraped_at"])
 
-def fill_missing_days(df):
-    out = []
-    for pid, g in df.groupby("product_id"):
-        if len(g) < 2:
-            continue
-        g = g.set_index("scraped_at").asfreq("D")
-        g["product_id"] = pid
-        g["price"] = g["price"].interpolate()
-        out.append(g.reset_index())
-    return pd.concat(out) if out else pd.DataFrame()
+def update_historical(today_df):
+    if today_df.empty:
+        return pd.DataFrame()
 
-def compute_metrics(df):
-    rows = []
-    for pid, g in df.groupby("product_id"):
-        g = g.sort_values("scraped_at")
-        g["returns"] = g["price"].pct_change()
-        rows.append({
+    if os.path.exists(HIST_FILE):
+        hist = pd.read_csv(HIST_FILE)
+        hist["date"] = pd.to_datetime(hist["date"]).dt.date
+        combined = pd.concat([hist, today_df], ignore_index=True)
+    else:
+        combined = today_df.copy()
+
+    combined.to_csv(HIST_FILE, index=False)
+    return combined
+
+
+def compute_metrics(hist):
+    metrics = []
+
+    for pid, g in hist.groupby("product_id"):
+        g = g.sort_values("date")
+        returns = g["price"].pct_change()
+
+        inflation = returns.mean()
+        volatility = returns.std()
+
+        metrics.append({
             "product_id": pid,
-            "avg_inflation_%": round(g["returns"].mean() * 100, 3),
-            "volatility_%": round(g["returns"].std() * 100, 3)
+            "inflation_rate": round(inflation, 4),
+            "volatility": round(volatility, 4)
         })
-    return pd.DataFrame(rows)
 
-def detect_spikes(df, threshold=10):
-    out = []
-    for pid, g in df.groupby("product_id"):
-        g = g.sort_values("scraped_at")
-        g["daily_change_%"] = g["price"].pct_change() * 100
-        out.append(g[abs(g["daily_change_%"]) > threshold])
-    return pd.concat(out) if out else pd.DataFrame()
+    metrics_df = pd.DataFrame(metrics)
+    metrics_df.to_csv(METRICS_FILE, index=False)
+    return metrics_df
 
-def detect_anomalies(df, z=3):
-    out = []
-    for pid, g in df.groupby("product_id"):
-        mean, std = g["price"].mean(), g["price"].std()
-        if std == 0:
+
+def detect_anomalies(hist, threshold=1.5):
+    anomalies = []
+
+    for pid, g in hist.groupby("product_id"):
+        g = g.sort_values("date")
+        returns = g["price"].pct_change()
+        mean = returns.mean()
+        std = returns.std()
+
+        if std == 0 or pd.isna(std):
             continue
-        g["z_score"] = (g["price"] - mean) / std
-        out.append(g[abs(g["z_score"]) > z])
-    return pd.concat(out) if out else pd.DataFrame()
+
+        z_scores = (returns - mean) / std
+
+        for i in range(len(z_scores)):
+            if abs(z_scores.iloc[i]) > threshold:
+                anomalies.append({
+                    "product_id": pid,
+                    "date": g.iloc[i]["date"],
+                    "price": g.iloc[i]["price"],
+                    "z_score": round(z_scores.iloc[i], 2)
+                })
+
+    anomalies_df = pd.DataFrame(anomalies)
+    anomalies_df.to_csv(ANOMALY_FILE, index=False)
+    return anomalies_df
+
 
 def main():
-    df = load_data()
-    if df.empty:
-        print("No valid data yet.")
+    today_df = load_today_prices()
+    if today_df.empty:
+        print("No valid data today.")
         return
 
-    hist = fill_missing_days(build_historical(df))
-    if hist.empty:
-        print("Not enough history to compute metrics yet.")
+    hist = update_historical(today_df)
+
+    if len(hist) < 3:
+        print("Not enough history yet for metrics.")
         return
 
-    compute_metrics(hist).to_csv("price_metrics.csv", index=False)
-    detect_spikes(hist).to_csv("price_spikes.csv", index=False)
-    detect_anomalies(hist).to_csv("price_anomalies.csv", index=False)
-    hist.to_csv("historical_prices.csv", index=False)
+    compute_metrics(hist)
+    detect_anomalies(hist)
 
-    print("Metrics pipeline complete.")
+    print("Historical table, metrics, and anomalies updated.")
+
 
 if __name__ == "__main__":
     main()
